@@ -1,0 +1,79 @@
+ARG DEBIAN_RELEASE
+
+FROM debian:${DEBIAN_RELEASE}
+
+ARG PG_MAJOR_VERSION
+ARG PGASTGREP_VERSION
+ARG DEBIAN_RELEASE
+
+# Install PostgreSQL
+RUN apt-get update
+RUN apt-get install -y wget gnupg
+RUN echo "deb http://apt.postgresql.org/pub/repos/apt/ ${DEBIAN_RELEASE}-pgdg main" >> /etc/apt/sources.list.d/pgdg.list
+RUN file="$(cat /etc/apt/sources.list.d/pgdg.list)" && echo $file
+RUN wget --quiet -O - https://www.postgresql.org/media/keys/ACCC4CF8.asc | apt-key add -
+RUN apt-get update
+RUN apt-get install -y build-essential postgresql-server-dev-${PG_MAJOR_VERSION} postgresql-${PG_MAJOR_VERSION}
+
+# Install utilities
+RUN apt-get install -y jq git ruby
+
+# Install fpm for the creation of the .deb file,
+# and install toml so TOML files can be parsed later
+RUN gem install --no-document fpm toml
+
+# Install rust
+RUN apt-get install -y curl pkg-config
+RUN curl --proto '=https' --tlsv1.2 -sSf https://sh.rustup.rs | sh -s -- -y
+ENV PATH="/root/.cargo/bin:${PATH}"
+
+# Prepare source directory
+COPY ./ /src
+WORKDIR /src/pg_ast_grep
+
+# Install pgrx using the version in Cargo.toml
+RUN PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version') && \
+    cargo install cargo-pgrx --force --version "${PGRX_VERSION}"
+RUN cargo pgrx init --pg${PG_MAJOR_VERSION} $(which pg_config)
+
+# Package the extension. This command will create all the files necessary to package up in a .deb file.
+# We know the directory in which this command will create the files, and we save it in the RELEASE_DIR env variable.
+RUN cargo pgrx package --features pg${PG_MAJOR_VERSION}
+ENV RELEASE_DIR /src/target/release/pg_ast_grep-pg${PG_MAJOR_VERSION}
+
+# Create the directory for the outgoing .deb package
+RUN mkdir /artifacts && chmod 777 /artifacts
+
+# Create the --before-install script
+RUN echo $'#!/bin/bash\n\
+    \n\
+    if ! id -u postgres 2>&1 > /dev/null; then\n\
+    echo "[!] User 'postgres' does not exist. Have the official Postgres packages been installed yet?"\n\
+    exit 1\n\
+    fi' >> /tmp/before-install.sh
+
+# Package everything up based on whatever's in RELEASE_DIR, and send the resulting
+# .deb file to the /artifact directory. We don't check if PostgreSQL is installed
+# (e.g. via -d "postgresql-${PG_MAJOR_VERSION}") because it could have been compiled
+# from source or installed in a myriad of other ways. We simply check for the postgres
+# user and let the install fail and hard if the required directories do not exist.
+RUN DEB_FILENAME="pg_ast_grep-${PGASTGREP_VERSION}-postgresql-${PG_MAJOR_VERSION}-debian-${DEBIAN_RELEASE}-$(dpkg --print-architecture).deb" && \
+    cd ${RELEASE_DIR} && fpm \
+    -s dir \
+    -t deb \
+    -n pg_ast_grep \
+    -m 'Kasper Marstal, kaspermarstal@gmail.com' \
+    --description 'pg_ast_grep is a PostgreSQL extension that lets you grep through the AST of your queries.' \
+    -v ${PGASTGREP_VERSION} \
+    --url 'https://github.com/codemod-com/pg_ast_grep' \
+    --license 'Apache 2.0 License' \
+    --category 'Databases' \
+    --deb-no-default-config-files \
+    --before-install /tmp/before-install.sh \
+    -p /artifacts/$DEB_FILENAME \
+    --deb-user postgres \
+    --deb-group postgres \
+    -a native \
+    .
+
+RUN ls /artifacts
