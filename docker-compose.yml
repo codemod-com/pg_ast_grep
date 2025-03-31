@@ -1,0 +1,17 @@
+version: '3.9'
+
+services:
+  pg-ast-grep:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - .:/app
+      - cargo-cache:/home/developer/.cargo
+      - pgrx-cache:/home/developer/.pgrx
+    working_dir: /app
+    command: sleep infinity
+
+volumes:
+  cargo-cache: 
+  pgrx-cache:
