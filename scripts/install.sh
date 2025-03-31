@@ -96,6 +96,5 @@ fi
 PG_CONFIG_PATH="${PG_CONFIG_PATH:-$(which pg_config)}"
 
 # Install pg_ast_grep
-cd pg_ast_grep
 cargo pgrx install --no-default-features --release --sudo --pg-config="${PG_CONFIG_PATH}"
 echo "pg_ast_grep installed successfully."
