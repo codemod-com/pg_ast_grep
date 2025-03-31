@@ -33,7 +33,7 @@ WORKDIR /src/pg_ast_grep
 
 # Install pgrx using the version in Cargo.toml
 RUN PGRX_VERSION=$(cargo metadata --format-version 1 | jq -r '.packages[]|select(.name=="pgrx")|.version') && \
-    cargo install cargo-pgrx --force --version "${PGRX_VERSION}"
+    cargo install cargo-pgrx --force --version "${PGRX_VERSION}" --locked
 RUN cargo pgrx init --pg${PG_MAJOR_VERSION} $(which pg_config)
 
 # Package the extension. This command will create all the files necessary to package up in a .deb file.
