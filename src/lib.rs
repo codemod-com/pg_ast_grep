@@ -91,7 +91,6 @@ mod tests {
 
     #[pg_test]
     fn test_match_ast_rule_typescript() {
-        println!("test XXXXXXXXXXXX");
         let source = r#"
             function test() {
                 console.log("hello");

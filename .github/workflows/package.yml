@@ -23,6 +23,10 @@ jobs:
         #   - distribution: "debian"
         #     release: "bullseye"
           - distribution: "debian"
+            architecture: "amd64"
+            release: "bookworm"
+          - distribution: "debian"
+            architecture: "arm64"
             release: "bookworm"
     permissions:
       contents: write
